@@ -267,8 +267,9 @@
     }
 
     function onlineHost(){
+
       isHost=true;
-      lbL.textContent='YOU (HOST)';lbR.textContent='OPPONENT';
+      lbL.textContent='OPPONENT';lbR.textContent='YOU (HOST)';
       const code=Math.floor(1000+Math.random()*9000).toString();
       retryArea.innerHTML=`
         <div style="color:#aaa;font-size:.5rem;letter-spacing:.1em;text-align:center">Share this code with your friend:</div>
