@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PONG ARCADE</title>
+  <script>
+    function loadPeerJS() {
+      const s = document.createElement('script');
+      s.src = 'https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js';
+      s.onerror = () => { const s2 = document.createElement('script'); s2.src = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.1/dist/peerjs.min.js'; document.head.appendChild(s2); };
+      document.head.appendChild(s);
+    }
+    loadPeerJS();
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:'Orbitron',monospace;overflow:hidden}
+    body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,180,.03) 2px,rgba(0,255,180,.03) 4px);pointer-events:none;z-index:100}
+    #title{color:#00ffb4;font-size:2.2rem;font-weight:900;letter-spacing:.5em;text-shadow:0 0 20px #00ffb4,0 0 60px #00ffb480;margin-bottom:8px;animation:flicker 4s infinite}
+    @keyframes flicker{0%,95%,100%{opacity:1}96%{opacity:.6}97%{opacity:1}98%{opacity:.4}99%{opacity:1}}
+    #scoreboard{display:flex;gap:80px;margin-bottom:10px;align-items:center}
+    .score{font-size:2.5rem;font-weight:700;color:#fff;text-shadow:0 0 15px #00ffb4;min-width:60px;text-align:center;transition:transform .15s}
+    .score.pop{transform:scale(1.4)}
+    .player-label{font-size:.55rem;letter-spacing:.2em;color:#00ffb480;text-align:center;margin-top:4px}
+    #canvas-wrap{position:relative;border:2px solid #00ffb430;box-shadow:0 0 40px #00ffb420,inset 0 0 40px #00ffb408;border-radius:4px}
+    canvas{display:block;background:#050f0b;border-radius:2px;touch-action:none;max-width:100%}
+    #overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.88);border-radius:2px;gap:12px;transition:opacity .4s;padding:20px;z-index:50}
+    #overlay.hidden{opacity:0;pointer-events:none}
+    #ov-title{font-size:1.1rem;color:#00ffb4;letter-spacing:.3em;text-shadow:0 0 20px #00ffb4}
+    #ov-sub{font-size:.58rem;color:#aaa;letter-spacing:.1em;text-align:center;line-height:2}
+    .mode-btns{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+    .mbtn{padding:10px 16px;background:transparent;border:2px solid #00ffb4;color:#00ffb4;font-family:'Orbitron',monospace;font-size:.62rem;font-weight:700;letter-spacing:.1em;cursor:pointer;text-transform:uppercase;box-shadow:0 0 12px #00ffb430;transition:all .2s;border-radius:2px;display:flex;flex-direction:column;align-items:center;gap:4px}
+    .mbtn .ic{font-size:1.3rem}.mbtn .sb{font-size:.42rem;color:#aaa;font-weight:400}
+    .mbtn:hover{background:#00ffb4;color:#000;box-shadow:0 0 28px #00ffb4}.mbtn:hover .sb{color:#000}
+    #retry-area{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+    .ctrl-row{display:flex;gap:36px}
+    .ctrl{text-align:center;font-size:.48rem;color:#555;letter-spacing:.08em;line-height:2}
+    .key{display:inline-block;border:1px solid #333;border-radius:3px;padding:1px 5px;color:#888;font-size:.48rem;background:#111}
+    #bottom-btns{display:flex;gap:12px;margin-top:8px}
+    .gbtn{padding:7px 20px;background:transparent;border:2px solid #00ffb480;color:#00ffb4;font-family:'Orbitron',monospace;font-size:.6rem;font-weight:700;letter-spacing:.12em;cursor:pointer;border-radius:2px;transition:all .2s}
+    .gbtn:hover{background:#00ffb430}.gbtn#exit-btn{border-color:#ff4444;color:#ff4444}.gbtn#exit-btn:hover{background:#ff444430}.gbtn.hidden{display:none}
+    .mbtn#btn-on:hover{background:#a78bfa;color:#000;box-shadow:0 0 28px #a78bfa}
+    #ping-display{font-size:.45rem;color:#444;letter-spacing:.1em;margin-top:2px;text-align:center;min-height:14px}
+    #online-status{font-size:.52rem;letter-spacing:.1em;text-align:center;min-height:16px;margin-top:2px}
+    #online-status.ok{color:#00ffb4}#online-status.err{color:#ff4444}#online-status.warn{color:#ffe135}
+    #room-code-display{font-size:2rem;font-weight:900;color:#00ffb4;letter-spacing:.4em;text-shadow:0 0 30px #00ffb4;text-align:center;padding:8px 16px;border:2px solid #00ffb430;border-radius:4px;background:#00ffb408}
+    #code-input{background:#111;border:2px solid #a78bfa;color:#a78bfa;font-family:'Orbitron',monospace;font-size:1.4rem;font-weight:700;letter-spacing:.4em;text-align:center;padding:8px 16px;border-radius:4px;width:160px;text-transform:uppercase;outline:none;position:relative;z-index:200;pointer-events:all;-webkit-user-select:text;user-select:text;}
+    #pu-legend{font-size:.48rem;color:#666;letter-spacing:.08em;margin-top:4px;display:none}
+    #pu-legend span{margin:0 6px}
+  </style>
+</head>
+<body>
+  <div id="title">PONG ARCADE</div>
+  <div id="scoreboard">
+    <div><div class="score" id="sL">0</div><div class="player-label" id="lbL">PLAYER 1</div></div>
+    <div><div class="score" id="sR">0</div><div class="player-label" id="lbR">PLAYER 2</div></div>
+  </div>
+  <div id="canvas-wrap">
+    <canvas id="canvas" width="700" height="560"></canvas>
+    <div id="overlay">
+      <div id="ov-title">PONG ARCADE</div>
+      <div id="ov-sub">Choose your game mode!</div>
+      <div class="mode-btns" id="mode-btns">
+        <button class="mbtn" id="btn-br"><span class="ic">🧱</span>SINGLE PLAYER<span class="sb">Break all bricks!</span></button>
+        <button class="mbtn" id="btn-ai"><span class="ic">🤖</span>VS COMPUTER<span class="sb">Beat the AI!</span></button>
+        <button class="mbtn" id="btn-mp"><span class="ic">⚡</span>MULTIPLAYER<span class="sb">2 Players local!</span></button>
+        <button class="mbtn" id="btn-on" style="border-color:#a78bfa;color:#a78bfa;box-shadow:0 0 12px #a78bfa30"><span class="ic">🌐</span>ONLINE<span class="sb">Play with friends!</span></button>
+      </div>
+      <div id="ctrl-area"></div>
+      <div id="retry-area"></div>
+    </div>
+  </div>
+  <div id="bottom-btns">
+    <button class="gbtn hidden" id="pause-btn">⏸ PAUSE</button>
+    <button class="gbtn hidden" id="menu-btn">🏠 MENU</button>
+    <button class="gbtn hidden" id="exit-btn">✖ EXIT</button>
+  </div>
+  <div id="pu-legend">
+    <span style="color:#ff6b35">🔥 Big Paddle</span>
+    <span style="color:#ffe135">⚡ Speed Boost</span>
+    <span style="color:#35d4ff">🧊 Freeze</span>
+    <span style="color:#c084fc">💜 Shrink Enemy</span>
+  </div>
+  <div id="ping-display"></div>
+
+  <script>
+    const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+    const W=canvas.width,H=canvas.height;
+    const ovTitle=document.getElementById('ov-title'),ovSub=document.getElementById('ov-sub');
+    const modeBtns=document.getElementById('mode-btns'),ctrlArea=document.getElementById('ctrl-area'),retryArea=document.getElementById('retry-area');
+    const pauseBtn=document.getElementById('pause-btn'),menuBtn=document.getElementById('menu-btn'),exitBtn=document.getElementById('exit-btn');
+    const sLEl=document.getElementById('sL'),sREl=document.getElementById('sR');
+    const lbL=document.getElementById('lbL'),lbR=document.getElementById('lbR');
+    const puLegend=document.getElementById('pu-legend');
+
+    // ── AUDIO ──────────────────────────────────────────────────────────────────
+    const AC=new(window.AudioContext||window.webkitAudioContext)();
+    function mkRev(){const n=AC.sampleRate*.3,b=AC.createBuffer(2,n,AC.sampleRate);for(let c=0;c<2;c++){const d=b.getChannelData(c);for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,2);}const v=AC.createConvolver();v.buffer=b;return v;}
+    const rev=mkRev(),rg=AC.createGain();rg.gain.value=.15;rev.connect(rg);rg.connect(AC.destination);
+    function ao(n){n.connect(AC.destination);n.connect(rev);}
+    function tone(f,tp,d,v,fe){try{const o=AC.createOscillator(),g=AC.createGain();o.type=tp;o.frequency.setValueAtTime(f,AC.currentTime);if(fe)o.frequency.exponentialRampToValueAtTime(fe,AC.currentTime+d);g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g);ao(g);o.start();o.stop(AC.currentTime+d+.05);}catch(e){}}
+    const sPad=()=>{tone(200,'sine',.09,.3);tone(1200,'square',.04,.07);};
+    const sWall=()=>{try{const t=AC.currentTime,n=AC.sampleRate*.05,b=AC.createBuffer(1,n,AC.sampleRate),d=b.getChannelData(0);for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,3);const s=AC.createBufferSource(),f=AC.createBiquadFilter(),g=AC.createGain();s.buffer=b;f.type='bandpass';f.frequency.value=300;g.gain.setValueAtTime(.22,t);g.gain.exponentialRampToValueAtTime(.001,t+.08);s.connect(f);f.connect(g);ao(g);s.start();}catch(e){}};
+    const sScore=()=>{[300,400,500].forEach((f,i)=>setTimeout(()=>tone(f,'sine',.12,.22),i*100));};
+    const sWin=()=>{[523,659,784,659,1047].forEach((f,i)=>setTimeout(()=>tone(f,'sine',.3,.32),i*150));};
+    const sCd=()=>tone(440,'sine',.18,.2);
+    const sGo=()=>tone(300,'sawtooth',.25,.28,1400);
+    const sBrick=()=>tone(380,'square',.07,.18,120);
+    const sPwUp=()=>{[400,600,800,1000].forEach((f,i)=>setTimeout(()=>tone(f,'sine',.12,.2),i*60));};
+
+    // ── CONSTANTS ──────────────────────────────────────────────────────────────
+    const PH=80,PS=6,BS=10,WIN=7;
+    const PPH=12,PPS=7;
+    const BR=5,BC=10,BW=58,BH=18,BP=4;
+    const BCOLS=['#ff6b6b','#ff9f43','#ffe135','#00ffb4','#35d4ff'];
+    const PTYPES=[
+      {type:'bigPaddle',  emoji:'🔥',label:'BIG PADDLE', color:'#ff6b35'},
+      {type:'speedBoost', emoji:'⚡',label:'SPEED BOOST',color:'#ffe135'},
+      {type:'freeze',     emoji:'🧊',label:'FREEZE',     color:'#35d4ff'},
+      {type:'shrink',     emoji:'💜',label:'SHRINK FOE', color:'#c084fc'},
+    ];
+
+    // ── STATE ──────────────────────────────────────────────────────────────────
+    let mode=null,running=false,paused=false,countdown=0,cdTimer=null,keys={};
+    let lp,rp,ball,sL=0,sR=0,lives=3;
+    let bricks=[];
+    let getReadyMsg='';
+    let fallingPUs=[],fxList=[],puSpawnTimer=null;
+
+    // ── ONLINE STATE ───────────────────────────────────────────────────────────
+    // Architecture: HOST runs ALL physics. GUEST only renders what host sends.
+    // Both players see: THEMSELVES at BOTTOM (green), OPPONENT at TOP (red).
+    // Coordinate space is always host-native (y=0 top, y=H bottom).
+    let peer=null,conn=null,isHost=false,onlinePingStart=0,onlinePingMs=0;
+    let onlineMyPad ={x:0,y:H-6-PPH,w:W,h:PPH,ax:W/2}; // my paddle = BOTTOM
+    let onlineOpPad ={x:0,y:6,      w:W,h:PPH,ax:W/2}; // opponent  = TOP
+    let onlinePaused=false;
+    let onlineRoleFlash=0; // frames remaining to show "YOUR PADDLE" hint
+    const pingDisplay=document.getElementById('ping-display');
+
+    function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();}
+    function animPop(el){el.classList.add('pop');setTimeout(()=>el.classList.remove('pop'),200);}
+    function hideOverlay(){document.getElementById('overlay').classList.add('hidden');}
+
+    function initBall(spd){
+      const s=spd||7,angle=(Math.random()*40-20)*Math.PI/180,dir=Math.random()<.5?1:-1;
+      if(mode==='ai'||mode==='multi'){ball={x:W/2,y:H/2,vx:Math.sin(angle)*s,vy:Math.cos(angle)*s*dir,size:BS,trail:[]};}
+      else{ball={x:W/2,y:H/2,vx:Math.cos(angle)*s*dir,vy:Math.sin(angle)*s,size:BS,trail:[]};}
+    }
+    const ZONE=50;
+    function initPads(){
+      lp={x:0,y:6,       w:W,h:PPH,ax:W/2,frozen:false};
+      rp={x:0,y:H-6-PPH, w:W,h:PPH,ax:W/2,frozen:false};
+    }
+    function makeBricks(){
+      bricks=[];
+      const tw=BC*(BW+BP)-BP,sx=(W-tw)/2;
+      for(let r=0;r<BR;r++)for(let c=0;c<BC;c++)
+        bricks.push({x:sx+c*(BW+BP),y:60+r*(BH+BP),w:BW,h:BH,color:BCOLS[r%BCOLS.length],alive:true,hp:r<2?2:1});
+    }
+
+    // ── POWER-UPS ──────────────────────────────────────────────────────────────
+    function spawnFallingPU(x,y){
+      const t=PTYPES[Math.floor(Math.random()*PTYPES.length)];
+      fallingPUs.push({x:x||Math.random()*(W-60)+30,y:y||0,vy:2.2,w:32,h:32,...t});
+    }
+    function schedulePUSpawn(){
+      clearTimeout(puSpawnTimer);
+      if(!mode||mode==='breakout'||mode==='online')return;
+      puSpawnTimer=setTimeout(()=>{if(running&&!paused)spawnPongPU();schedulePUSpawn();},7000+Math.random()*5000);
+    }
+    function spawnPongPU(){
+      const t=PTYPES[Math.floor(Math.random()*PTYPES.length)];
+      const side=Math.random()<.5?'top':'bottom';
+      const x=80+Math.random()*(W-160);
+      if(side==='top')fallingPUs.push({...t,x,y:H-80,vx:0,vy:-2.2,w:32,h:32,pulse:0,target:'top'});
+      else fallingPUs.push({...t,x,y:80,vx:0,vy:2.2,w:32,h:32,pulse:0,target:'bottom'});
+    }
+    function updateFallingPUs(){
+      for(let i=fallingPUs.length-1;i>=0;i--){
+        const p=fallingPUs[i];
+        p.pulse=(p.pulse||0)+.1;
+        if(mode==='breakout'){
+          p.y+=p.vy;
+          const pad=lp;
+          if(p.x+p.w/2>pad.x&&p.x-p.w/2<pad.x+pad.w&&p.y+p.h>pad.y&&p.y<pad.y+pad.h){applyPU(p,'left');fallingPUs.splice(i,1);}
+          else if(p.y>H+40)fallingPUs.splice(i,1);
+        }else{
+          p.x+=p.vx;p.y+=p.vy;
+          const pad=p.target==='top'?lp:rp,side=p.target==='top'?'left':'right';
+          if(p.x+p.w/2>pad.x&&p.x-p.w/2<pad.x+pad.w&&p.y+p.h/2>pad.y&&p.y-p.h/2<pad.y+pad.h){applyPU(p,side);fallingPUs.splice(i,1);}
+          else if(p.y<-50||p.y>H+50)fallingPUs.splice(i,1);
+        }
+      }
+    }
+    function applyPU(p,side){
+      const tgt=side==='left'?lp:rp,opp=side==='left'?rp:lp;
+      if(p.type==='bigPaddle'){tgt.h=PH*2;addFX(tgt,'🔥','#ff6b35',5000);setTimeout(()=>{tgt.h=PH;},5000);}
+      if(p.type==='speedBoost'){const s=Math.hypot(ball.vx,ball.vy);ball.vx=(ball.vx/s)*s*1.7;ball.vy=(ball.vy/s)*s*1.7;addFX(tgt,'⚡','#ffe135',3000);setTimeout(()=>{const s2=Math.hypot(ball.vx,ball.vy);if(s2>13){ball.vx=(ball.vx/s2)*9;ball.vy=(ball.vy/s2)*9;}},3000);}
+      if(p.type==='freeze'&&opp){opp.frozen=true;addFX(opp,'🧊','#35d4ff',3000);setTimeout(()=>{opp.frozen=false;},3000);}
+      if(p.type==='shrink'&&opp){const orig=opp.h;opp.h=Math.max(30,PH*.4);addFX(opp,'💜','#c084fc',4000);setTimeout(()=>{opp.h=orig;},4000);}
+      sPwUp();
+    }
+    function addFX(pad,emoji,color,dur){fxList.push({pad,emoji,color,exp:Date.now()+dur});}
+
+    // ── COUNTDOWN ──────────────────────────────────────────────────────────────
+    function startCd(cb){
+      running=false;countdown=3;
+      if(cdTimer)clearInterval(cdTimer);
+      cdTimer=setInterval(()=>{
+        if(paused)return;countdown--;
+        if(countdown<=0){clearInterval(cdTimer);cdTimer=null;countdown=0;running=true;sGo();if(cb)cb();}
+        else sCd();
+      },1000);
+    }
+
+    // ── RESULTS / MENU ─────────────────────────────────────────────────────────
+    function showResult(title,sub,btnTxt,cb){
+      running=false;ovTitle.textContent=title;ovSub.innerHTML=sub;
+      modeBtns.style.display='none';ctrlArea.innerHTML='';retryArea.innerHTML='';
+      const b1=document.createElement('button');b1.className='mbtn';b1.textContent=btnTxt;b1.onclick=cb;
+      const b2=document.createElement('button');b2.className='mbtn';b2.style.borderColor='#555';b2.style.color='#aaa';b2.textContent='🏠 MENU';b2.onclick=showMenu;
+      retryArea.appendChild(b1);retryArea.appendChild(b2);
+      document.getElementById('overlay').classList.remove('hidden');
+    }
+    function showMenu(){
+      running=false;paused=false;mode=null;onlinePaused=false;
+      clearInterval(cdTimer);cdTimer=null;countdown=0;
+      clearTimeout(puSpawnTimer);fallingPUs=[];fxList=[];
+      if(conn){try{conn.close();}catch(e){}conn=null;}
+      if(peer){try{peer.destroy();}catch(e){}peer=null;}
+      pingDisplay.textContent='';
+      pauseBtn.classList.add('hidden');menuBtn.classList.add('hidden');exitBtn.classList.add('hidden');
+      pauseBtn.textContent='⏸ PAUSE';puLegend.style.display='none';
+      ovTitle.textContent='PONG ARCADE';ovSub.textContent='Choose your game mode!';
+      modeBtns.style.display='';ctrlArea.innerHTML='';retryArea.innerHTML='';
+      document.getElementById('overlay').classList.remove('hidden');
+    }
+
+    // ── ONLINE ─────────────────────────────────────────────────────────────────
+    function setOnlineStatus(msg,cls){ovSub.innerHTML='<span id="online-status" class="'+cls+'">'+msg+'</span>';}
+
+    function startOnline(){
+      mode='online';
+      lbL.textContent='YOU';lbR.textContent='OPPONENT';
+      sL=0;sR=0;sLEl.textContent='0';sREl.textContent='0';
+      modeBtns.style.display='none';ctrlArea.innerHTML='';retryArea.innerHTML='';
+      pauseBtn.classList.remove('hidden');menuBtn.classList.remove('hidden');exitBtn.classList.remove('hidden');
+      puLegend.style.display='none';
+      ovTitle.textContent='🌐 ONLINE MULTIPLAYER';ovSub.innerHTML='';
+      retryArea.innerHTML=`
+        <button class="mbtn" id="ob-host" style="border-color:#a78bfa;color:#a78bfa"><span class="ic">🏠</span>CREATE ROOM<span class="sb">Get a room code</span></button>
+        <button class="mbtn" id="ob-join" style="border-color:#a78bfa;color:#a78bfa"><span class="ic">🔗</span>JOIN ROOM<span class="sb">Enter friend's code</span></button>`;
+      document.getElementById('ob-host').onclick=onlineHost;
+      document.getElementById('ob-join').onclick=onlineJoin;
+      document.getElementById('overlay').classList.remove('hidden');
+    }
+
+    function onlineInitPeer(id,cb){
+      if(typeof Peer==='undefined'){setOnlineStatus('⏳ Loading network library...','warn');setTimeout(()=>onlineInitPeer(id,cb),500);return;}
+      setOnlineStatus('Connecting to network...','warn');
+      peer=new Peer(id,{debug:0});
+      peer.on('open',cb);
+      peer.on('error',e=>setOnlineStatus('❌ Error: '+e.type+'. Try refreshing.','err'));
+    }
+
+    function onlineHost(){
+      isHost=true;
+      lbL.textContent='YOU (HOST)';lbR.textContent='OPPONENT';
+      const code=Math.floor(1000+Math.random()*9000).toString();
+      retryArea.innerHTML=`
+        <div style="color:#aaa;font-size:.5rem;letter-spacing:.1em;text-align:center">Share this code with your friend:</div>
+        <div id="room-code-display">${code}</div>
+        <button class="mbtn" id="ob-copy" style="border-color:#a78bfa;color:#a78bfa"><span class="ic">📋</span>COPY CODE</button>`;
+      document.getElementById('ob-copy').onclick=()=>{
+        const btn=document.getElementById('ob-copy');
+        try{
+          if(navigator.clipboard&&window.isSecureContext)
+            navigator.clipboard.writeText(code).then(()=>{btn.querySelector('.ic').textContent='✅';setTimeout(()=>{if(btn)btn.querySelector('.ic').textContent='📋';},2000);});
+          else{const t=document.createElement('input');t.value=code;document.body.appendChild(t);t.select();document.execCommand('copy');document.body.removeChild(t);btn.querySelector('.ic').textContent='✅';setTimeout(()=>{if(btn)btn.querySelector('.ic').textContent='📋';},2000);}
+        }catch(e){alert('Your code is: '+code);}
+      };
+      onlineInitPeer('pong-room-'+code,()=>{
+        setOnlineStatus('✓ Room ready! Waiting for friend...','ok');
+        peer.on('connection',c=>{
+          conn=c;
+          conn.on('open',()=>{
+            mode='online';onlineSetupConn();
+            setOnlineStatus('🎮 Friend connected! Starting...','ok');
+            pauseBtn.classList.remove('hidden');menuBtn.classList.remove('hidden');exitBtn.classList.remove('hidden');
+            setTimeout(()=>{document.getElementById('overlay').classList.add('hidden');onlineStartGame();},1200);
+          });
+        });
+      });
+    }
+
+    function onlineJoin(){
+      isHost=false;
+      lbL.textContent='YOU (GUEST)';lbR.textContent='OPPONENT';
+      retryArea.innerHTML=`
+        <div style="color:#aaa;font-size:.5rem;letter-spacing:.1em;text-align:center">Enter your friend's 4-digit code:</div>
+        <input id="code-input" type="number" min="1000" max="9999" placeholder="1234" style="background:#111;border:2px solid #a78bfa;color:#a78bfa;font-family:Orbitron,monospace;font-size:1.4rem;font-weight:700;letter-spacing:.3em;text-align:center;padding:8px 16px;border-radius:4px;width:170px;outline:none;-moz-appearance:textfield;position:relative;z-index:999;pointer-events:all;touch-action:auto;-webkit-user-select:text;user-select:text;cursor:text"/>
+        <button class="mbtn" id="ob-connect" style="border-color:#a78bfa;color:#a78bfa"><span class="ic">🔗</span>JOIN GAME</button>`;
+      setTimeout(()=>{const inp=document.getElementById('code-input');if(inp)inp.focus();},100);
+      onlineInitPeer(undefined,()=>{setOnlineStatus('✓ Ready! Enter the 4-digit code above.','ok');});
+      setOnlineStatus('⏳ Connecting to network...','warn');
+      document.getElementById('ob-connect').onclick=()=>{
+        const code=String(document.getElementById('code-input').value).trim();
+        if(code.length!==4||isNaN(Number(code))){setOnlineStatus('❌ Enter a valid 4-digit code!','err');return;}
+        if(!peer||!peer.open){setOnlineStatus('⏳ Still connecting to network, please wait...','warn');return;}
+        setOnlineStatus('Connecting to room '+code+'...','warn');
+        try{
+          conn=peer.connect('pong-room-'+code,{reliable:true});
+          if(!conn){setOnlineStatus('❌ Could not reach room. Check the code!','err');return;}
+          conn.on('open',()=>{
+            mode='online';onlineSetupConn();
+            setOnlineStatus('🎮 Connected! Starting...','ok');
+            // FIX: Guest always controls BOTTOM paddle, sees opponent at TOP
+            onlineMyPad ={x:0,y:H-6-PPH,w:W,h:PPH,ax:W/2};
+            onlineOpPad ={x:0,y:6,       w:W,h:PPH,ax:W/2};
+            ball={x:W/2,y:H/2,vx:0,vy:0,size:BS,trail:[]};
+            running=false;countdown=0;
+            pauseBtn.classList.remove('hidden');menuBtn.classList.remove('hidden');exitBtn.classList.remove('hidden');
+            // Tell host guest is ready so host can start countdown
+            onlineSend({t:'guestReady'});
+          });
+          conn.on('error',e=>setOnlineStatus('❌ Could not connect: '+e+'. Check the code!','err'));
+          setTimeout(()=>{if(conn&&!conn.open)setOnlineStatus('❌ Timed out. Is the code correct?','err');},10000);
+        }catch(e){setOnlineStatus('❌ Error: '+e.message,'err');}
+      };
+      setTimeout(()=>{
+        const inp=document.getElementById('code-input');
+        if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('ob-connect').click();});
+      },100);
+    }
+
+    function onlineSetupConn(){
+      conn.on('data',onlineData);
+      conn.on('close',()=>{
+        running=false;
+        document.getElementById('overlay').classList.remove('hidden');
+        ovTitle.textContent='😢 DISCONNECTED';
+        ovSub.innerHTML='<span style="color:#ff4444">Opponent left the game.</span>';
+        retryArea.innerHTML='<button class="mbtn" onclick="showMenu()">🏠 BACK TO MENU</button>';
+        modeBtns.style.display='none';
+      });
+      setInterval(()=>{if(conn&&conn.open){onlinePingStart=Date.now();onlineSend({t:'pi'});}},2000);
+    }
+
+    function onlineSend(data){if(conn&&conn.open)conn.send(data);}
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // onlineData — the heart of the online sync
+    //
+    // COORDINATE MODEL (same for host and guest):
+    //   • MY paddle  = BOTTOM of screen  (y ≈ H-18)
+    //   • OP paddle  = TOP    of screen  (y ≈ 6)
+    //   • Ball uses host-native coords (y=0 top, y=H bottom) on BOTH screens.
+    //
+    // What host sends in packet 's':
+    //   bx,by,vx,vy,tr  — ball position (host space)
+    //   myAx            — host's OWN (bottom) paddle ax
+    //   sHost, sGuest   — individual scores, clearly labelled
+    //   r,cd            — running flag, countdown
+    //
+    // Guest renders:
+    //   ball at (bx, by)           — same coords, no flip needed
+    //   onlineOpPad.ax = myAx      — host's paddle appears at top on guest screen
+    //   scoreboard sL(YOU)=sGuest, sR(OPPONENT)=sHost
+    // ─────────────────────────────────────────────────────────────────────────
+    function onlineData(d){
+      if(d.t==='pi'){onlineSend({t:'po'});return;}
+      if(d.t==='po'){onlinePingMs=Date.now()-onlinePingStart;pingDisplay.textContent='Ping: '+onlinePingMs+'ms';return;}
+
+      if(d.t==='guestReady'&&isHost){
+        setOnlineStatus('🎮 Friend ready! Starting...','ok');
+        return;
+      }
+
+      // ── PAUSE SYNC ──
+      // Host receives pause request from guest → host decides and broadcasts back
+      if(d.t==='pauseReq'&&isHost){
+        togglePause(); // host handles it, which will send {t:'pause'} back to guest
+        return;
+      }
+      // Guest (and host's own call) receives authoritative pause state
+      if(d.t==='pause'&&!isHost){
+        applyOnlinePause(d.p);
+        return;
+      }
+
+      if(!isHost){
+        // ── GUEST receives authoritative state from host ──────────
+        if(d.t==='s'){
+          ball={x:d.bx,y:d.by,vx:d.vx,vy:d.vy,size:BS,trail:d.tr||[]};
+          onlineOpPad.ax=d.myAx;
+          sL=d.sGuest;  // YOU
+          sR=d.sHost;   // OPPONENT
+          sLEl.textContent=sL;sREl.textContent=sR;
+          // Only update running/countdown from host if NOT locally paused
+          // (prevents host's running=true packets from un-pausing guest)
+          if(!paused){running=d.r;countdown=d.cd;}
+        }
+        if(d.t==='w'){
+          running=false;sWin();
+          onlineShowResult(d.w==='host'?'OPPONENT WINS!':'🎉 YOU WIN!');
+        }
+        if(d.t==='cd'){if(!paused)countdown=d.cd;}
+        if(d.t==='reset'){
+          ball={x:W/2,y:H/2,vx:0,vy:0,size:BS,trail:[]};
+          running=false;countdown=3;paused=false;onlinePaused=false;
+          onlineRoleFlash=120;
+          pauseBtn.textContent='⏸ PAUSE';
+          document.getElementById('overlay').classList.add('hidden');
+        }
+      }else{
+        // ── HOST receives from guest ──────────────────────────────
+        if(d.t==='p'){
+          onlineOpPad.ax=d.ax;
+        }
+      }
+    }
+
+    function onlineStartGame(){
+      sL=0;sR=0;sLEl.textContent=0;sREl.textContent=0;
+      onlineMyPad ={x:0,y:H-6-PPH,w:W,h:PPH,ax:W/2};
+      onlineOpPad ={x:0,y:6,       w:W,h:PPH,ax:W/2};
+      ball={x:W/2,y:H/2,vx:0,vy:0,size:BS,trail:[]};
+      running=false;countdown=0;paused=false;onlinePaused=false;
+      pauseBtn.textContent='⏸ PAUSE';
+      onlineRoleFlash=180; // show for ~3 seconds (180 frames @ 60fps)
+      if(isHost)onlineResetBall();
+    }
+
+    function onlineResetBall(){
+      running=false;
+      onlineSend({t:'reset'}); // tell guest: hide overlay, start countdown=3
+      const angle=(Math.random()*40-20)*Math.PI/180,dir=Math.random()<.5?1:-1,spd=7;
+      ball={x:W/2,y:H/2,vx:Math.sin(angle)*spd,vy:Math.cos(angle)*spd*dir,size:BS,trail:[]};
+      countdown=3;
+      onlineSend({t:'cd',cd:3});
+      if(cdTimer)clearInterval(cdTimer);
+      cdTimer=setInterval(()=>{
+        if(paused)return;countdown--;
+        onlineSend({t:'cd',cd:countdown});
+        if(countdown<=0){clearInterval(cdTimer);cdTimer=null;countdown=0;running=true;sGo();}
+        else sCd();
+      },1000);
+    }
+
+    // HOST physics loop — runs every frame, broadcasts to guest
+    function onlineUpdateHost(){
+      // Broadcast authoritative state to guest every frame
+      // Use clearly named fields: myAx = host's own paddle, sHost/sGuest = scores
+      onlineSend({
+        t:'s',
+        bx:ball.x,by:ball.y,vx:ball.vx,vy:ball.vy,tr:ball.trail,
+        myAx:onlineMyPad.ax,
+        sHost:sL,sGuest:sR,
+        r:running&&!paused,  // FIX: never tell guest running=true while host is paused
+        cd:countdown
+      });
+
+      if(!running||paused)return;
+
+      ball.trail.push({x:ball.x,y:ball.y});
+      if(ball.trail.length>10)ball.trail.shift();
+      ball.x+=ball.vx;ball.y+=ball.vy;
+
+      // Left/right walls
+      if(ball.x-ball.size/2<=0){ball.x=ball.size/2;ball.vx*=-1;sWall();}
+      if(ball.x+ball.size/2>=W){ball.x=W-ball.size/2;ball.vx*=-1;sWall();}
+
+      const br=ball.size/2;
+      const topPadBottom   = onlineOpPad.y + onlineOpPad.h;   // y ≈ 18
+      const botPadTop      = onlineMyPad.y;                    // y ≈ 542
+
+      // FIX BUG 3 (phantom bounce) + BUG 2 (tunneling):
+      // Use a STRICT Y window — ball must actually be within ±speed of the paddle face.
+      // Check the PREVIOUS and CURRENT position to catch fast-moving balls (tunneling fix).
+      const prevY = ball.y - ball.vy; // where ball was last frame
+
+      // TOP paddle (opponent) — bounce when ball travels UP through paddle face
+      if(ball.vy<0){
+        // Did ball cross the paddle face this frame? (between prevY and ball.y)
+        if(prevY-br>=topPadBottom && ball.y-br<=topPadBottom){
+          if(ball.x>onlineOpPad.ax-ZONE&&ball.x<onlineOpPad.ax+ZONE){
+            const rel=(ball.x-onlineOpPad.ax)/ZONE,ang=rel*65*Math.PI/180;
+            const spd=Math.min(Math.hypot(ball.vx,ball.vy)*1.05,14);
+            ball.y=topPadBottom+br; // push out of paddle
+            ball.vx=Math.sin(ang)*spd;ball.vy=Math.abs(Math.cos(ang)*spd);sPad();
+          }
+        }
+      }
+
+      // BOTTOM paddle (host) — bounce when ball travels DOWN through paddle face
+      if(ball.vy>0){
+        if(prevY+br<=botPadTop && ball.y+br>=botPadTop){
+          if(ball.x>onlineMyPad.ax-ZONE&&ball.x<onlineMyPad.ax+ZONE){
+            const rel=(ball.x-onlineMyPad.ax)/ZONE,ang=rel*65*Math.PI/180;
+            const spd=Math.min(Math.hypot(ball.vx,ball.vy)*1.05,14);
+            ball.y=botPadTop-br; // push out of paddle
+            ball.vx=Math.sin(ang)*spd;ball.vy=-Math.abs(Math.cos(ang)*spd);sPad();
+          }
+        }
+      }
+
+      // Scoring:
+      // ball exits TOP (y<0)   → host's bottom paddle missed → GUEST scores
+      // ball exits BOTTOM (y>H) → guest's top paddle missed → HOST scores
+      if(ball.y<-20){
+        sR++;sREl.textContent=sR;animPop(sREl);sScore(); // sR = guest score on host screen
+        if(sR>=WIN){onlineSend({t:'w',w:'guest'});onlineShowResult('OPPONENT WINS!');}
+        else{running=false;setTimeout(onlineResetBall,800);}
+      }
+      if(ball.y>H+20){
+        sL++;sLEl.textContent=sL;animPop(sLEl);sScore(); // sL = host score
+        if(sL>=WIN){onlineSend({t:'w',w:'host'});onlineShowResult('🎉 YOU WIN!');}
+        else{running=false;setTimeout(onlineResetBall,800);}
+      }
+    }
+
+    function onlineShowResult(msg){
+      running=false;sWin();
+      document.getElementById('overlay').classList.remove('hidden');
+      ovTitle.textContent=msg;
+      ovSub.innerHTML='<span style="color:#00ffb4">Score: '+sL+' — '+sR+'</span>';
+      modeBtns.style.display='none';ctrlArea.innerHTML='';
+      retryArea.innerHTML=`
+        ${isHost?'<button class="mbtn" id="ob-again"><span class="ic">🔄</span>PLAY AGAIN</button>':'<div style="color:#aaa;font-size:.5rem">Waiting for host...</div>'}
+        <button class="mbtn" onclick="showMenu()" style="border-color:#555;color:#aaa">🏠 MENU</button>`;
+      if(isHost&&document.getElementById('ob-again'))
+        document.getElementById('ob-again').onclick=()=>{document.getElementById('overlay').classList.add('hidden');onlineStartGame();};
+    }
+
+    // ── DRAW ONLINE ────────────────────────────────────────────────────────────
+    // HOST sees: themselves at BOTTOM (green), opponent at TOP (red). y=0 is top.
+    // GUEST sees: themselves at BOTTOM (green), opponent at TOP (red).
+    //   But ball coords come from host space, so guest must FLIP Y: drawY = H - ball.y
+    //   This means when host sees ball near their bottom paddle, guest sees it near their top (opponent) paddle — correct.
+    function drawOnline(){
+      ctx.clearRect(0,0,W,H);
+
+      // For guest, all Y coords are flipped: fy(y) = H - y
+      // For host, fy(y) = y (no change)
+      const fy = isHost ? (y=>y) : (y=>H-y);
+
+      // Dashed center line (same either way)
+      ctx.setLineDash([8,12]);ctx.strokeStyle='#00ffb420';ctx.lineWidth=2;
+      ctx.beginPath();ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.stroke();ctx.setLineDash([]);
+
+      // Court zone labels
+      ctx.font='bold 11px Orbitron,monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillStyle='#ff6b6b25';ctx.fillText('▲ OPPONENT ZONE ▲',W/2,H/4);
+      ctx.fillStyle='#00ffb425';ctx.fillText('▼ YOUR ZONE ▼',W/2,H*3/4);
+
+      // Ball trail — flip Y for guest
+      ball.trail.forEach((pt,i)=>{
+        const a=(i/ball.trail.length)*.4,r=BS*(i/ball.trail.length)*.8;
+        ctx.beginPath();ctx.arc(pt.x,fy(pt.y),r,0,Math.PI*2);
+        ctx.fillStyle=`rgba(0,255,180,${a})`;ctx.fill();
+      });
+      // Ball — flip Y for guest
+      if(running||countdown>0){
+        ctx.beginPath();ctx.arc(ball.x,fy(ball.y),BS/2,0,Math.PI*2);
+        ctx.fillStyle='#fff';ctx.shadowColor='#00ffb4';ctx.shadowBlur=18;ctx.fill();ctx.shadowBlur=0;
+      }
+
+      // MY paddle — always drawn at BOTTOM (green) — its visual Y is fixed at H-6-PPH
+      const myVisY = H-6-PPH;
+      ctx.fillStyle='#ffffff10';rr(0,myVisY,W,PPH,3);ctx.fill();
+      ctx.fillStyle='#00ffb4';ctx.shadowColor='#00ffb4';ctx.shadowBlur=14;
+      rr(onlineMyPad.ax-ZONE,myVisY,ZONE*2,PPH,5);ctx.fill();ctx.shadowBlur=0;
+      ctx.font='bold 8px Orbitron,monospace';ctx.textAlign='center';ctx.textBaseline='bottom';
+      ctx.fillStyle='#00ffb4cc';
+      ctx.fillText('▼ YOU',onlineMyPad.ax,myVisY-2);
+
+      // OPPONENT paddle — always drawn at TOP (red) — its visual Y is fixed at 6
+      const opVisY = 6;
+      ctx.fillStyle='#ffffff10';rr(0,opVisY,W,PPH,3);ctx.fill();
+      ctx.fillStyle='#ff6b6b';ctx.shadowColor='#ff6b6b';ctx.shadowBlur=14;
+      rr(onlineOpPad.ax-ZONE,opVisY,ZONE*2,PPH,5);ctx.fill();ctx.shadowBlur=0;
+      ctx.font='7px Orbitron,monospace';ctx.textAlign='center';ctx.textBaseline='bottom';
+      ctx.fillStyle='#ff6b6b80';
+      ctx.fillText('OPPONENT',onlineOpPad.ax,opVisY-2);
+
+      // Countdown
+      if(countdown>0){
+        ctx.font='bold 100px Orbitron,monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+        ctx.fillStyle='#00ffb4';ctx.shadowColor='#00ffb4';ctx.shadowBlur=30;
+        ctx.fillText(countdown,W/2,H/2);ctx.shadowBlur=0;
+      }
+
+      // Waiting for host message (guest only)
+      if(!isHost&&!running&&countdown===0&&ball.vx===0&&ball.vy===0){
+        ctx.font='14px Orbitron,monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+        ctx.fillStyle='#ffffff50';ctx.fillText('Waiting for host to start...',W/2,H/2+30);
+      }
+
+      // Ping indicator
+      if(onlinePingMs>0){
+        ctx.font='9px monospace';ctx.textAlign='right';ctx.textBaseline='top';
+        ctx.fillStyle=onlinePingMs<100?'#00ffb460':'#ff443380';
+        ctx.fillText('ping '+onlinePingMs+'ms',W-6,6);
+      }
+
+      // "YOUR PADDLE" role flash
+      if(onlineRoleFlash>0){
+        onlineRoleFlash--;
+        const alpha=Math.min(1,onlineRoleFlash/30);
+        ctx.font='bold 13px Orbitron,monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+        ctx.fillStyle=`rgba(0,255,180,${alpha})`;
+        ctx.shadowColor='#00ffb4';ctx.shadowBlur=20*alpha;
+        ctx.fillText('▼ YOUR PADDLE — MOVE ME! ▼',W/2,myVisY-22);
+        ctx.shadowBlur=0;
+      }
+
+      if(paused)drawPaused();
+    }
+
+    // ── MODE STARTERS ──────────────────────────────────────────────────────────
+    function startBtn(label,cb){
+      retryArea.innerHTML='';
+      const b=document.createElement('button');b.className='mbtn';b.textContent=label;
+      b.onclick=()=>{hideOverlay();pauseBtn.classList.remove('hidden');menuBtn.classList.remove('hidden');exitBtn.classList.remove('hidden');fallingPUs=[];fxList=[];startCd(cb);schedulePUSpawn();};
+      retryArea.appendChild(b);
+    }
+
+    function startBreakout(){
+      mode='breakout';lbL.textContent='SCORE';lbR.textContent='LIVES';
+      sL=0;lives=3;sLEl.textContent='0';sREl.textContent='❤️❤️❤️';
+      lp={x:W/2-50,y:H-40,w:100,h:12,frozen:false};
+      makeBricks();fallingPUs=[];fxList=[];
+      ball={x:W/2,y:H-65,vx:3.5,vy:-6,size:BS,trail:[]};
+      ovTitle.textContent='SINGLE PLAYER';
+      ovSub.innerHTML='Break bricks! Catch falling power-ups!<br><b>← → or A D</b> to move paddle';
+      modeBtns.style.display='none';ctrlArea.innerHTML='';puLegend.style.display='';
+      startBtn('▶ START',null);document.getElementById('overlay').classList.remove('hidden');
+    }
+    function startAI(){
+      mode='ai';lbL.textContent='COMPUTER';lbR.textContent='PLAYER';
+      sL=0;sR=0;sLEl.textContent='0';sREl.textContent='0';
+      initPads();initBall();fallingPUs=[];fxList=[];
+      ovTitle.textContent='VS COMPUTER';
+      ovSub.innerHTML='First to '+WIN+' wins! Catch falling power-ups!<br><b>← → or A D</b> to move your paddle (bottom)';
+      modeBtns.style.display='none';ctrlArea.innerHTML='';puLegend.style.display='';
+      startBtn('▶ START',null);document.getElementById('overlay').classList.remove('hidden');
+    }
+    function startMulti(){
+      mode='multi';lbL.textContent='PLAYER 1';lbR.textContent='PLAYER 2';
+      sL=0;sR=0;sLEl.textContent='0';sREl.textContent='0';
+      initPads();initBall();fallingPUs=[];fxList=[];
+      ovTitle.textContent='MULTIPLAYER';
+      ovSub.innerHTML='First to '+WIN+' wins! Catch falling power-ups!<br><span style="color:#aaa">P1 (top): <b>A / D</b> &nbsp;&nbsp; P2 (bottom): <b>← / →</b></span>';
+      modeBtns.style.display='none';ctrlArea.innerHTML='';puLegend.style.display='';
+      startBtn('▶ START',null);document.getElementById('overlay').classList.remove('hidden');
+    }
+
+    // ── UPDATE LOOP ────────────────────────────────────────────────────────────
+    function update(){
+      if(mode==='online'){
+        // Both host and guest move their own paddle continuously
+        if(keys['ArrowLeft']||keys['a']||keys['A']){
+          onlineMyPad.ax=Math.max(ZONE,onlineMyPad.ax-PPS);
+          onlineSend({t:'p',ax:onlineMyPad.ax});
+        }
+        if(keys['ArrowRight']||keys['d']||keys['D']){
+          onlineMyPad.ax=Math.min(W-ZONE,onlineMyPad.ax+PPS);
+          onlineSend({t:'p',ax:onlineMyPad.ax});
+        }
+        // ONLY host runs physics — guest just receives and renders
+        if(isHost)onlineUpdateHost();
+        return;
+      }
+      if(!running||paused)return;
+      updateFallingPUs();
+      fxList=fxList.filter(f=>Date.now()<f.exp);
+      if(mode==='breakout')updBreakout();
+      else if(mode==='ai')updAI();
+      else if(mode==='multi')updMulti();
+    }
+
+    function moveBall(){ball.trail.push({x:ball.x,y:ball.y});if(ball.trail.length>12)ball.trail.shift();ball.x+=ball.vx;ball.y+=ball.vy;}
+    function wallBounce(){
+      if(mode==='ai'||mode==='multi'){
+        if(ball.x-ball.size/2<=0){ball.x=ball.size/2;ball.vx*=-1;sWall();}
+        if(ball.x+ball.size/2>=W){ball.x=W-ball.size/2;ball.vx*=-1;sWall();}
+      }else{
+        if(ball.x-ball.size/2<=0){ball.x=ball.size/2;ball.vx*=-1;sWall();}
+        if(ball.x+ball.size/2>=W){ball.x=W-ball.size/2;ball.vx*=-1;sWall();}
+        if(ball.y-ball.size/2<=0){ball.y=ball.size/2;ball.vy*=-1;sWall();}
+      }
+    }
+    function padBounceTB(p,side){
+      if(side==='top'   &&!(ball.y-ball.size/2<=p.y+p.h&&ball.vy<0))return;
+      if(side==='bottom'&&!(ball.y+ball.size/2>=p.y    &&ball.vy>0))return;
+      if(ball.x<p.ax-ZONE||ball.x>p.ax+ZONE)return;
+      const rel=(ball.x-p.ax)/ZONE,ang=rel*65*Math.PI/180;
+      const spd=Math.min(Math.hypot(ball.vx,ball.vy)*1.05,14);
+      if(side==='top'){ball.y=p.y+p.h+ball.size/2;ball.vx=Math.sin(ang)*spd;ball.vy=Math.abs(Math.cos(ang)*spd);}
+      else{ball.y=p.y-ball.size/2;ball.vx=Math.sin(ang)*spd;ball.vy=-Math.abs(Math.cos(ang)*spd);}
+      sPad();
+    }
+
+    function updBreakout(){
+      const p=lp;
+      if(!p.frozen){if(keys['ArrowLeft']||keys['a']||keys['A'])p.x-=PS+1;if(keys['ArrowRight']||keys['d']||keys['D'])p.x+=PS+1;}
+      p.x=Math.max(0,Math.min(W-p.w,p.x));moveBall();
+      if(ball.x-ball.size/2<=0){ball.x=ball.size/2;ball.vx*=-1;sWall();}
+      if(ball.x+ball.size/2>=W){ball.x=W-ball.size/2;ball.vx*=-1;sWall();}
+      if(ball.y-ball.size/2<=0){ball.y=ball.size/2;ball.vy*=-1;sWall();}
+      if(ball.vy>0&&ball.y+ball.size/2>=p.y&&ball.y-ball.size/2<=p.y+p.h&&ball.x>=p.x&&ball.x<=p.x+p.w){
+        ball.y=p.y-ball.size/2;const rel=(ball.x-(p.x+p.w/2))/(p.w/2),ang=rel*60*Math.PI/180;
+        const spd=Math.min(Math.hypot(ball.vx,ball.vy)*1.02,12);ball.vx=Math.sin(ang)*spd;ball.vy=-Math.cos(ang)*spd;sPad();
+      }
+      if(ball.y>H+20){
+        lives--;sREl.textContent=lives>0?'❤️'.repeat(lives):'💀';
+        if(lives<=0){sWin();showResult('GAME OVER!','Score: <span style="color:#00ffb4">'+sL+'</span>','▶ TRY AGAIN',startBreakout);}
+        else{
+          running=false;let readyCd=2;getReadyMsg='GET READY!';
+          const readyTimer=setInterval(()=>{
+            if(paused)return;readyCd--;
+            if(readyCd<=0){clearInterval(readyTimer);getReadyMsg='';ball={x:lp.x+lp.w/2,y:lp.y-20,vx:3.5*(Math.random()<.5?1:-1),vy:-6,size:BS,trail:[]};running=true;}
+            else getReadyMsg='GET READY! '+readyCd;
+          },1000);
+          ball={x:W/2,y:H/2,vx:0,vy:0,size:BS,trail:[]};
+        }
+        return;
+      }
+      for(const b of bricks){
+        if(!b.alive)continue;
+        if(ball.x+ball.size/2>b.x&&ball.x-ball.size/2<b.x+b.w&&ball.y+ball.size/2>b.y&&ball.y-ball.size/2<b.y+b.h){
+          b.hp--;if(b.hp<=0){b.alive=false;if(Math.random()<0.4)spawnFallingPU(b.x+b.w/2,b.y+b.h);}
+          const oL=ball.x+ball.size/2-b.x,oR=b.x+b.w-(ball.x-ball.size/2);
+          const oT=ball.y+ball.size/2-b.y,oB=b.y+b.h-(ball.y-ball.size/2);
+          if(Math.min(oL,oR)<Math.min(oT,oB))ball.vx*=-1;else ball.vy*=-1;
+          sL+=(b.hp<=0?10:5);sLEl.textContent=sL;sBrick();break;
+        }
+      }
+      if(bricks.filter(b=>b.alive).length===0){sWin();showResult('🎉 YOU WIN!','All bricks cleared!<br>Score: <span style="color:#00ffb4">'+sL+'</span>','▶ PLAY AGAIN',startBreakout);}
+    }
+
+    function updAI(){
+      if(!rp.frozen){if(keys['ArrowLeft']||keys['a']||keys['A'])rp.ax-=PPS;if(keys['ArrowRight']||keys['d']||keys['D'])rp.ax+=PPS;}
+      rp.ax=Math.max(ZONE,Math.min(W-ZONE,rp.ax));
+      const diff=ball.x-lp.ax,aiSpd=Math.min(Math.abs(diff),PPS*.78);
+      if(Math.abs(diff)>10&&!lp.frozen)lp.ax+=diff>0?aiSpd:-aiSpd;
+      lp.ax=Math.max(ZONE,Math.min(W-ZONE,lp.ax));
+      for(const p of fallingPUs){if(p.target==='top'&&p.y<H/2){const d=p.x-lp.ax,s=Math.min(Math.abs(d),PPS*.5);if(Math.abs(d)>8&&!lp.frozen)lp.ax+=d>0?s:-s;}}
+      lp.ax=Math.max(ZONE,Math.min(W-ZONE,lp.ax));
+      moveBall();wallBounce();padBounceTB(lp,'top');padBounceTB(rp,'bottom');checkScore();
+    }
+    function updMulti(){
+      if(!lp.frozen){if(keys['a']||keys['A'])lp.ax-=PPS;if(keys['d']||keys['D'])lp.ax+=PPS;}
+      if(!rp.frozen){if(keys['ArrowLeft'])rp.ax-=PPS;if(keys['ArrowRight'])rp.ax+=PPS;}
+      lp.ax=Math.max(ZONE,Math.min(W-ZONE,lp.ax));rp.ax=Math.max(ZONE,Math.min(W-ZONE,rp.ax));
+      moveBall();wallBounce();padBounceTB(lp,'top');padBounceTB(rp,'bottom');checkScore();
+    }
+    function checkScore(){
+      if(mode==='ai'||mode==='multi'){
+        if(ball.y<-20){sR++;sREl.textContent=sR;animPop(sREl);sScore();if(sR>=WIN)endGame('bottom');else{running=false;setTimeout(()=>{initBall();startCd();},800);}}
+        if(ball.y>H+20){sL++;sLEl.textContent=sL;animPop(sLEl);sScore();if(sL>=WIN)endGame('top');else{running=false;setTimeout(()=>{initBall();startCd();},800);}}
+      }
+    }
+    function endGame(side){
+      running=false;sWin();fallingPUs=[];fxList=[];clearTimeout(puSpawnTimer);
+      let w;if(mode==='ai')w=side==='top'?'COMPUTER':'PLAYER';else w=side==='top'?'PLAYER 1':'PLAYER 2';
+      const restart=mode==='ai'?startAI:startMulti;
+      showResult(w+' WINS!','<span style="color:#00ffb4">Congratulations!</span>','▶ PLAY AGAIN',restart);
+    }
+
+    // ── DRAW ───────────────────────────────────────────────────────────────────
+    function draw(){
+      ctx.clearRect(0,0,W,H);
+      if(mode==='online'){drawOnline();return;}
+      if(mode==='breakout')drawBreakout();else if(mode)drawPong();
+      drawFallingPUs();if(countdown>0&&!paused)drawCd();drawGetReady();if(paused)drawPaused();
+    }
+    function drawBall(){
+      ball.trail.forEach((pt,i)=>{const a=(i/ball.trail.length)*.4,r=ball.size*(i/ball.trail.length)*.8;ctx.beginPath();ctx.arc(pt.x,pt.y,r,0,Math.PI*2);ctx.fillStyle=`rgba(0,255,180,${a})`;ctx.fill();});
+      ctx.beginPath();ctx.arc(ball.x,ball.y,ball.size/2,0,Math.PI*2);ctx.fillStyle='#fff';ctx.shadowColor='#00ffb4';ctx.shadowBlur=18;ctx.fill();ctx.shadowBlur=0;
+    }
+    function drawPad(p){
+      if(mode==='ai'||mode==='multi'){
+        ctx.fillStyle='#ffffff18';rr(p.x,p.y,p.w,p.h,3);ctx.fill();
+        ctx.fillStyle=p.frozen?'rgba(53,212,255,.7)':'#fff';ctx.shadowColor=p.frozen?'#35d4ff':'#00ffb4';ctx.shadowBlur=16;
+        rr(p.ax-ZONE,p.y,ZONE*2,p.h,5);ctx.fill();ctx.shadowBlur=0;
+      }else{
+        ctx.fillStyle='#fff';ctx.shadowColor='#00ffb4';ctx.shadowBlur=12;rr(p.x,p.y,p.w,p.h,5);ctx.fill();ctx.shadowBlur=0;
+        if(p.frozen){ctx.fillStyle='rgba(53,212,255,.22)';rr(p.x,p.y,p.w,p.h,5);ctx.fill();}
+      }
+    }
+    function drawFX(){
+      fxList.forEach(f=>{
+        const p=f.pad,x=(mode==='ai'||mode==='multi')?(p.ax-ZONE):p.x,w=(mode==='ai'||mode==='multi')?ZONE*2:p.w;
+        ctx.strokeStyle=f.color;ctx.lineWidth=3;ctx.shadowColor=f.color;ctx.shadowBlur=18;ctx.strokeRect(x-3,p.y-3,w+6,p.h+6);ctx.shadowBlur=0;
+        ctx.font='13px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(f.emoji,x+w/2,p.y+(mode==='ai'||mode==='multi'?p.h/2:p.y-13));
+      });
+    }
+    function drawPong(){
+      ctx.setLineDash([8,12]);ctx.strokeStyle='#00ffb420';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.stroke();ctx.setLineDash([]);
+      ctx.font='9px Orbitron,monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#00ffb425';
+      ctx.fillText(mode==='ai'?'COMPUTER':'PLAYER 1',W/2,H/4+10);ctx.fillText(mode==='ai'?'PLAYER':'PLAYER 2',W/2,H*3/4-10);
+      drawBall();drawPad(lp);drawPad(rp);drawFX();
+    }
+    function drawBreakout(){
+      bricks.forEach(b=>{
+        if(!b.alive)return;ctx.fillStyle=b.hp>1?b.color:b.color+'88';ctx.shadowColor=b.color;ctx.shadowBlur=5;ctx.fillRect(b.x,b.y,b.w,b.h);
+        ctx.strokeStyle='#00000050';ctx.lineWidth=1;ctx.strokeRect(b.x,b.y,b.w,b.h);ctx.shadowBlur=0;
+        if(b.hp>1){ctx.fillStyle='#fff8';ctx.font='9px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('★',b.x+b.w/2,b.y+b.h/2);}
+      });
+      drawBall();const p=lp;ctx.fillStyle='#fff';ctx.shadowColor='#00ffb4';ctx.shadowBlur=14;rr(p.x,p.y,p.w,p.h,5);ctx.fill();ctx.shadowBlur=0;drawFX();
+    }
+    function drawFallingPUs(){
+      fallingPUs.forEach(p=>{
+        const pulse=Math.sin(p.pulse)*2,s=p.w/2+pulse;
+        ctx.beginPath();rr(p.x-s,p.y-s,s*2,s*2,8);ctx.fillStyle=p.color+'25';ctx.fill();
+        ctx.strokeStyle=p.color;ctx.lineWidth=2;ctx.shadowColor=p.color;ctx.shadowBlur=12;ctx.stroke();ctx.shadowBlur=0;
+        ctx.font=`${s*1.2}px serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(p.emoji,p.x,p.y);
+        ctx.font='7px Orbitron,monospace';ctx.fillStyle=p.color;ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(p.label,p.x,p.y+s+3);
+        if(mode!=='breakout'){const arrowDir=p.vx<0?'◀':'▶';ctx.font='10px Orbitron,monospace';ctx.fillStyle=p.color+'cc';ctx.textBaseline='middle';ctx.fillText(arrowDir,p.x+(p.vx<0?-s-12:s+12),p.y);}
+      });
+    }
+    function drawCd(){ctx.font='bold 100px Orbitron,monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#00ffb4';ctx.shadowColor='#00ffb4';ctx.shadowBlur=30;ctx.fillText(countdown,W/2,H/2);ctx.shadowBlur=0;}
+    function drawGetReady(){
+      if(!getReadyMsg)return;
+      ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,0,W,H);
+      ctx.font='bold 42px Orbitron,monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillStyle='#ff6b35';ctx.shadowColor='#ff6b35';ctx.shadowBlur=25;ctx.fillText(getReadyMsg,W/2,H/2);ctx.shadowBlur=0;
+      ctx.font='14px Orbitron,monospace';ctx.fillStyle='#ffffff70';ctx.fillText('MOVE YOUR PADDLE INTO POSITION!',W/2,H/2+50);
+    }
+    function drawPaused(){
+      ctx.fillStyle='rgba(0,0,0,.75)';ctx.fillRect(0,0,W,H);
+      ctx.font='bold 55px Orbitron,monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillStyle='#00ffb4';ctx.shadowColor='#00ffb4';ctx.shadowBlur=25;ctx.fillText('PAUSED',W/2,H/2-60);ctx.shadowBlur=0;
+      ctx.font='11px Orbitron,monospace';ctx.fillStyle='#ffffff60';ctx.fillText('PRESS SPACE OR CLICK RESUME TO CONTINUE',W/2,H/2-15);
+      drawPauseBtn(W/2-110,H/2+30,100,36,'▶ RESUME','#00ffb4',pauseHover==='resume');
+      drawPauseBtn(W/2+10,H/2+30,100,36,'🏠 MENU','#aaaaaa',pauseHover==='menu');
+    }
+    function drawPauseBtn(x,y,w,h,label,color,hovered){
+      ctx.fillStyle=hovered?color+'55':color+'22';rr(x,y,w,h,5);ctx.fill();
+      ctx.strokeStyle=color;ctx.lineWidth=hovered?3:2;ctx.shadowColor=color;ctx.shadowBlur=hovered?20:10;rr(x,y,w,h,5);ctx.stroke();ctx.shadowBlur=0;
+      ctx.font=`bold ${hovered?12:11}px Orbitron,monospace`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=hovered?'#fff':color;ctx.fillText(label,x+w/2,y+h/2);
+    }
+
+    const pauseMenuBtnRect  ={x:W/2+10, y:H/2+30,w:100,h:36};
+    const pauseResumeBtnRect={x:W/2-110,y:H/2+30,w:100,h:36};
+    let pauseHover=null;
+
+    // ── LOOP ───────────────────────────────────────────────────────────────────
+    function loop(){update();draw();}
+    setInterval(loop,16);
+
+    // ── PAUSE ──────────────────────────────────────────────────────────────────
+    function togglePause(){
+      if(!mode)return;
+      if(mode==='online'){
+        if(isHost){
+          // Host is physics authority — toggle directly and notify guest
+          onlinePaused=!onlinePaused;
+          paused=onlinePaused;
+          pauseBtn.textContent=paused?'▶ RESUME':'⏸ PAUSE';
+          onlineSend({t:'pause',p:paused});
+          if(paused){clearInterval(cdTimer);cdTimer=null;}
+          else if(countdown>0){
+            cdTimer=setInterval(()=>{
+              countdown--;onlineSend({t:'cd',cd:countdown});
+              if(countdown<=0){clearInterval(cdTimer);cdTimer=null;countdown=0;running=true;sGo();}
+              else sCd();
+            },1000);
+          }
+        }else{
+          // Guest sends pause request to host
+          onlineSend({t:'pauseReq'});
+        }
+        return;
+      }
+      if(!running&&!paused&&countdown===0)return;
+      paused=!paused;pauseBtn.textContent=paused?'▶ RESUME':'⏸ PAUSE';
+      if(countdown>0){if(paused){clearInterval(cdTimer);cdTimer=null;}else startCd();}
+      if(paused)clearTimeout(puSpawnTimer);else schedulePUSpawn();
+    }
+    function applyOnlinePause(p){
+      paused=p;onlinePaused=p;
+      pauseBtn.textContent=p?'▶ RESUME':'⏸ PAUSE';
+    }
+
+    // ── EVENTS ─────────────────────────────────────────────────────────────────
+    document.getElementById('btn-br').onclick=startBreakout;
+    document.getElementById('btn-ai').onclick=startAI;
+    document.getElementById('btn-mp').onclick=startMulti;
+    document.getElementById('btn-on').onclick=startOnline;
+    pauseBtn.addEventListener('click',togglePause);
+    menuBtn.addEventListener('click',showMenu);
+    exitBtn.addEventListener('click',()=>{if(confirm('Are you sure you want to exit the game?'))window.close();});
+    document.addEventListener('keydown',e=>{
+      if(e.target.tagName==='INPUT')return;
+      keys[e.key]=true;
+      if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();
+      if(e.key===' ')togglePause();
+    });
+    document.addEventListener('keyup',e=>{if(e.target.tagName!=='INPUT')keys[e.key]=false;});
+
+    canvas.addEventListener('mousemove',e=>{
+      const rect=canvas.getBoundingClientRect();
+      const cx=(e.clientX-rect.left)*(W/rect.width),cy=(e.clientY-rect.top)*(H/rect.height);
+      if(paused){
+        const overResume=cx>pauseResumeBtnRect.x&&cx<pauseResumeBtnRect.x+pauseResumeBtnRect.w&&cy>pauseResumeBtnRect.y&&cy<pauseResumeBtnRect.y+pauseResumeBtnRect.h;
+        const overMenu=cx>pauseMenuBtnRect.x&&cx<pauseMenuBtnRect.x+pauseMenuBtnRect.w&&cy>pauseMenuBtnRect.y&&cy<pauseMenuBtnRect.y+pauseMenuBtnRect.h;
+        pauseHover=overResume?'resume':overMenu?'menu':null;canvas.style.cursor=(overResume||overMenu)?'pointer':'default';return;
+      }
+      pauseHover=null;canvas.style.cursor='default';
+      if(!running&&countdown===0)return;
+      const mouseX=(e.clientX-rect.left)*(W/rect.width);
+      if(mode==='breakout'){lp.x=Math.max(0,Math.min(W-lp.w,mouseX-lp.w/2));}
+      else if(mode==='online'){onlineMyPad.ax=Math.max(ZONE,Math.min(W-ZONE,mouseX));onlineSend({t:'p',ax:onlineMyPad.ax});}
+      else if(mode==='ai'){if(!rp.frozen)rp.ax=Math.max(ZONE,Math.min(W-ZONE,mouseX));}
+      else if(mode==='multi'){if(cy<H/2){if(!lp.frozen)lp.ax=Math.max(ZONE,Math.min(W-ZONE,mouseX));}else{if(!rp.frozen)rp.ax=Math.max(ZONE,Math.min(W-ZONE,mouseX));}}
+    });
+
+    canvas.addEventListener('click',e=>{
+      const ov=document.getElementById('overlay');if(!ov.classList.contains('hidden'))return;if(!paused)return;
+      const rect=canvas.getBoundingClientRect();
+      const cx=(e.clientX-rect.left)*(W/rect.width),cy=(e.clientY-rect.top)*(H/rect.height);
+      if(cx>pauseResumeBtnRect.x&&cx<pauseResumeBtnRect.x+pauseResumeBtnRect.w&&cy>pauseResumeBtnRect.y&&cy<pauseResumeBtnRect.y+pauseResumeBtnRect.h)togglePause();
+      if(cx>pauseMenuBtnRect.x&&cx<pauseMenuBtnRect.x+pauseMenuBtnRect.w&&cy>pauseMenuBtnRect.y&&cy<pauseMenuBtnRect.y+pauseMenuBtnRect.h)showMenu();
+    });
+
+    canvas.addEventListener('touchmove',e=>{
+      const ov=document.getElementById('overlay');if(!ov.classList.contains('hidden')){return;}
+      e.preventDefault();const rect=canvas.getBoundingClientRect();
+      for(const t of e.changedTouches){
+        const tx=(t.clientX-rect.left)*(W/rect.width),ty=(t.clientY-rect.top)*(H/rect.height);
+        if(mode==='breakout'){if(!lp.frozen)lp.x=Math.max(0,Math.min(W-lp.w,tx-lp.w/2));}
+        else if(mode==='online'){onlineMyPad.ax=Math.max(ZONE,Math.min(W-ZONE,tx));onlineSend({t:'p',ax:onlineMyPad.ax});}
+        else if(mode==='ai'){if(!rp.frozen)rp.ax=Math.max(ZONE,Math.min(W-ZONE,tx));}
+        else if(mode==='multi'){if(ty<H/2){if(!lp.frozen)lp.ax=Math.max(ZONE,Math.min(W-ZONE,tx));}else{if(!rp.frozen)rp.ax=Math.max(ZONE,Math.min(W-ZONE,tx));}}
+      }
+    },{passive:false});
+    canvas.addEventListener('touchend',e=>{},{passive:false});
+
+    initPads();initBall();loop();
+  </script>
+</body>
+</html>
