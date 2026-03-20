@@ -78,6 +78,28 @@
   <div id="ping-display"></div>
 
   <script>
+    // ── SUPABASE CONFIG ───────────────────────────────────────────────────────
+    const SB_URL='https://aslxqzfemfvqqqworywp.supabase.co';
+    const SB_KEY='sb_publishable_Pa8vYFPFkU-s31ycNK_uww_6bYtMJRO';
+
+    async function sbInsertScore(name,score){
+      try{
+        await fetch(SB_URL+'/rest/v1/leaderboard',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY},
+          body:JSON.stringify({name,score})
+        });
+      }catch(e){console.error('Score save failed:',e);}
+    }
+    async function sbFetchScores(){
+      try{
+        const res=await fetch(SB_URL+'/rest/v1/leaderboard?select=name,score&order=score.desc&limit=10',{
+          headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+        });
+        return await res.json();
+      }catch(e){console.error('Score fetch failed:',e);return[];}
+    }
+
     const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
     const W=canvas.width,H=canvas.height;
     const ovTitle=document.getElementById('ov-title'),ovSub=document.getElementById('ov-sub');
@@ -497,6 +519,79 @@
       retryArea.appendChild(b);
     }
 
+    function showBreakoutEnd(title,score){
+      running=false;
+      ovTitle.textContent=title;
+      ovSub.innerHTML='Score: <span style="color:#00ffb4">'+score+'</span>';
+      modeBtns.style.display='none';ctrlArea.innerHTML='';retryArea.innerHTML='';
+      retryArea.innerHTML=`
+        <div style="color:#aaa;font-size:.5rem;letter-spacing:.1em;text-align:center">Enter your name for the leaderboard:</div>
+        <input id="lb-name-input" type="text" maxlength="12" placeholder="YOUR NAME"
+          style="background:#111;border:2px solid #00ffb4;color:#00ffb4;font-family:Orbitron,monospace;font-size:1rem;
+          font-weight:700;letter-spacing:.2em;text-align:center;padding:8px 12px;border-radius:4px;width:200px;
+          outline:none;text-transform:uppercase;position:relative;z-index:999;pointer-events:all;
+          -webkit-user-select:text;user-select:text;cursor:text"/>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+          <button class="mbtn" id="lb-save-btn"><span class="ic">💾</span>SAVE SCORE</button>
+          <button class="mbtn" id="lb-skip-btn" style="border-color:#555;color:#aaa"><span class="ic">⏭</span>SKIP</button>
+        </div>`;
+      document.getElementById('overlay').classList.remove('hidden');
+      setTimeout(()=>{const inp=document.getElementById('lb-name-input');if(inp)inp.focus();},100);
+      const doSave=async()=>{
+        const name=(document.getElementById('lb-name-input').value||'PLAYER').trim().toUpperCase()||'PLAYER';
+        await sbInsertScore(name,score);
+        showResult(title,'Score: <span style="color:#00ffb4">'+score+'</span>','▶ PLAY AGAIN',startBreakout);
+        const b2=document.createElement('button');b2.className='mbtn';b2.style.borderColor='#ffe135';b2.style.color='#ffe135';
+        b2.textContent='🏆 LEADERBOARD';b2.onclick=showLeaderboard;
+        document.getElementById('retry-area').appendChild(b2);
+      };
+      document.getElementById('lb-save-btn').onclick=doSave;
+      document.getElementById('lb-skip-btn').onclick=()=>{
+        showResult(title,'Score: <span style="color:#00ffb4">'+score+'</span>','▶ PLAY AGAIN',startBreakout);
+      };
+      setTimeout(()=>{
+        const inp=document.getElementById('lb-name-input');
+        if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('lb-save-btn').click();});
+      },100);
+    }
+
+    function showSinglePlayerMenu(){
+      modeBtns.style.display='none';ctrlArea.innerHTML='';retryArea.innerHTML='';
+      ovTitle.textContent='SINGLE PLAYER';
+      ovSub.innerHTML='What would you like to do?';
+      retryArea.innerHTML=`
+        <button class="mbtn" id="sp-play"><span class="ic">▶</span>PLAY<span class="sb">Start the game!</span></button>
+        <button class="mbtn" id="sp-lb" style="border-color:#ffe135;color:#ffe135;box-shadow:0 0 12px #ffe13530"><span class="ic">🏆</span>LEADERBOARD<span class="sb">Top scores</span></button>`;
+      document.getElementById('overlay').classList.remove('hidden');
+      document.getElementById('sp-play').onclick=startBreakout;
+      document.getElementById('sp-lb').onclick=showLeaderboard;
+    }
+
+    function showLeaderboard(){
+      modeBtns.style.display='none';ctrlArea.innerHTML='';retryArea.innerHTML='';
+      ovTitle.textContent='🏆 LEADERBOARD';
+      ovSub.innerHTML='<span style="color:#ffe135">Top 10 Scores</span>';
+      retryArea.innerHTML=`
+        <div id="lb-list" style="min-width:280px;text-align:center;font-size:.52rem;color:#aaa;letter-spacing:.08em;line-height:2.2">
+          <span style="color:#555">Loading...</span>
+        </div>
+        <button class="mbtn" id="lb-back" style="border-color:#555;color:#aaa;margin-top:6px">◀ BACK</button>`;
+      document.getElementById('overlay').classList.remove('hidden');
+      document.getElementById('lb-back').onclick=showSinglePlayerMenu;
+      sbFetchScores().then(rows=>{
+        const el=document.getElementById('lb-list');
+        if(!el)return;
+        if(!rows||rows.length===0){el.innerHTML='<span style="color:#555">No scores yet — be the first!</span>';return;}
+        const medals=['🥇','🥈','🥉'];
+        el.innerHTML=rows.map((r,i)=>
+          `<div style="display:flex;justify-content:space-between;width:260px;padding:2px 8px;background:${i===0?'#ffe13515':i%2===0?'#ffffff08':'transparent'};border-radius:3px">
+            <span>${medals[i]||'#'+(i+1)}&nbsp;&nbsp;<span style="color:#fff">${r.name}</span></span>
+            <span style="color:#00ffb4;font-weight:700">${r.score}</span>
+          </div>`
+        ).join('');
+      });
+    }
+
     function startBreakout(){
       mode='breakout';lbL.textContent='SCORE';lbR.textContent='LIVES';
       sL=0;lives=3;sLEl.textContent='0';sREl.textContent='❤️❤️❤️';
@@ -664,14 +759,14 @@
       }
 
       brkBallBricks(ball);
-      if(bricks.filter(b=>b.alive).length===0){sWin();showResult('🎉 YOU WIN!','All bricks cleared!<br>Score: <span style="color:#00ffb4">'+sL+'</span>','▶ PLAY AGAIN',startBreakout);}
+      if(bricks.filter(b=>b.alive).length===0){sWin();showBreakoutEnd('🎉 YOU WIN!',sL);}
     }
 
     function loseBrkLife(p){
       lives--;sREl.textContent=lives>0?'❤️'.repeat(lives):'💀';
       extraBalls=[];brkPUs=[];brkShield=false;
       if(brkShieldTimer){clearTimeout(brkShieldTimer);brkShieldTimer=null;}
-      if(lives<=0){sWin();showResult('GAME OVER!','Score: <span style="color:#00ffb4">'+sL+'</span>','▶ TRY AGAIN',startBreakout);}
+      if(lives<=0){sWin();showBreakoutEnd('GAME OVER!',sL);}
       else{
         running=false;let readyCd=2;getReadyMsg='GET READY!';
         const readyTimer=setInterval(()=>{
@@ -831,7 +926,7 @@
     }
 
     // ── EVENTS ─────────────────────────────────────────────────────────────────
-    document.getElementById('btn-br').onclick=startBreakout;
+    document.getElementById('btn-br').onclick=showSinglePlayerMenu;
     document.getElementById('btn-ai').onclick=startAI;
     document.getElementById('btn-mp').onclick=startMulti;
     document.getElementById('btn-on').onclick=startOnline;
