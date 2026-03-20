@@ -130,14 +130,11 @@
     let fallingPUs=[],fxList=[],puSpawnTimer=null;
 
     // ── ONLINE STATE ───────────────────────────────────────────────────────────
-    // Architecture: HOST runs ALL physics. GUEST only renders what host sends.
-    // Both players see: THEMSELVES at BOTTOM (green), OPPONENT at TOP (red).
-    // Coordinate space is always host-native (y=0 top, y=H bottom).
     let peer=null,conn=null,isHost=false,onlinePingStart=0,onlinePingMs=0;
-    let onlineMyPad ={x:0,y:H-6-PPH,w:W,h:PPH,ax:W/2}; // my paddle = BOTTOM
-    let onlineOpPad ={x:0,y:6,      w:W,h:PPH,ax:W/2}; // opponent  = TOP
+    let onlineMyPad ={x:0,y:H-6-PPH,w:W,h:PPH,ax:W/2};
+    let onlineOpPad ={x:0,y:6,      w:W,h:PPH,ax:W/2};
     let onlinePaused=false;
-    let onlineRoleFlash=0; // frames remaining to show "YOUR PADDLE" hint
+    let onlineRoleFlash=0;
     const pingDisplay=document.getElementById('ping-display');
 
     function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();}
@@ -267,7 +264,6 @@
     }
 
     function onlineHost(){
-
       isHost=true;
       lbL.textContent='OPPONENT';lbR.textContent='YOU (HOST)';
       const code=Math.floor(1000+Math.random()*9000).toString();
@@ -318,13 +314,11 @@
           conn.on('open',()=>{
             mode='online';onlineSetupConn();
             setOnlineStatus('🎮 Connected! Starting...','ok');
-            // FIX: Guest always controls BOTTOM paddle, sees opponent at TOP
             onlineMyPad ={x:0,y:H-6-PPH,w:W,h:PPH,ax:W/2};
             onlineOpPad ={x:0,y:6,       w:W,h:PPH,ax:W/2};
             ball={x:W/2,y:H/2,vx:0,vy:0,size:BS,trail:[]};
             running=false;countdown=0;
             pauseBtn.classList.remove('hidden');menuBtn.classList.remove('hidden');exitBtn.classList.remove('hidden');
-            // Tell host guest is ready so host can start countdown
             onlineSend({t:'guestReady'});
           });
           conn.on('error',e=>setOnlineStatus('❌ Could not connect: '+e+'. Check the code!','err'));
@@ -352,60 +346,24 @@
 
     function onlineSend(data){if(conn&&conn.open)conn.send(data);}
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // onlineData — the heart of the online sync
-    //
-    // COORDINATE MODEL (same for host and guest):
-    //   • MY paddle  = BOTTOM of screen  (y ≈ H-18)
-    //   • OP paddle  = TOP    of screen  (y ≈ 6)
-    //   • Ball uses host-native coords (y=0 top, y=H bottom) on BOTH screens.
-    //
-    // What host sends in packet 's':
-    //   bx,by,vx,vy,tr  — ball position (host space)
-    //   myAx            — host's OWN (bottom) paddle ax
-    //   sHost, sGuest   — individual scores, clearly labelled
-    //   r,cd            — running flag, countdown
-    //
-    // Guest renders:
-    //   ball at (bx, by)           — same coords, no flip needed
-    //   onlineOpPad.ax = myAx      — host's paddle appears at top on guest screen
-    //   scoreboard sL(YOU)=sGuest, sR(OPPONENT)=sHost
-    // ─────────────────────────────────────────────────────────────────────────
     function onlineData(d){
       if(d.t==='pi'){onlineSend({t:'po'});return;}
       if(d.t==='po'){onlinePingMs=Date.now()-onlinePingStart;pingDisplay.textContent='Ping: '+onlinePingMs+'ms';return;}
-
-      if(d.t==='guestReady'&&isHost){
-        setOnlineStatus('🎮 Friend ready! Starting...','ok');
-        return;
-      }
-
-      // ── PAUSE SYNC ──
-      // Host receives pause request from guest → host decides and broadcasts back
-      if(d.t==='pauseReq'&&isHost){
-        togglePause(); // host handles it, which will send {t:'pause'} back to guest
-        return;
-      }
-      // Guest (and host's own call) receives authoritative pause state
-      if(d.t==='pause'&&!isHost){
-        applyOnlinePause(d.p);
-        return;
-      }
-
+      if(d.t==='guestReady'&&isHost){setOnlineStatus('🎮 Friend ready! Starting...','ok');return;}
+      if(d.t==='pauseReq'&&isHost){togglePause();return;}
+      if(d.t==='pause'&&!isHost){applyOnlinePause(d.p);return;}
       if(!isHost){
-        // ── GUEST receives authoritative state from host ──────────
         if(d.t==='s'){
           ball={x:d.bx,y:d.by,vx:d.vx,vy:d.vy,size:BS,trail:d.tr||[]};
           onlineOpPad.ax=d.myAx;
-          sL=d.sGuest;  // YOU
-          sR=d.sHost;   // OPPONENT
+          sL=d.sGuest;sR=d.sHost;
           sLEl.textContent=sL;sREl.textContent=sR;
-          // Only update running/countdown from host if NOT locally paused
-          // (prevents host's running=true packets from un-pausing guest)
           if(!paused){running=d.r;countdown=d.cd;}
         }
         if(d.t==='w'){
           running=false;sWin();
+          if(d.sH!==undefined){sR=d.sH;sREl.textContent=sR;}
+          if(d.sG!==undefined){sL=d.sG;sLEl.textContent=sL;}
           onlineShowResult(d.w==='host'?'OPPONENT WINS!':'🎉 YOU WIN!');
         }
         if(d.t==='cd'){if(!paused)countdown=d.cd;}
@@ -417,10 +375,7 @@
           document.getElementById('overlay').classList.add('hidden');
         }
       }else{
-        // ── HOST receives from guest ──────────────────────────────
-        if(d.t==='p'){
-          onlineOpPad.ax=d.ax;
-        }
+        if(d.t==='p'){onlineOpPad.ax=d.ax;}
       }
     }
 
@@ -431,13 +386,13 @@
       ball={x:W/2,y:H/2,vx:0,vy:0,size:BS,trail:[]};
       running=false;countdown=0;paused=false;onlinePaused=false;
       pauseBtn.textContent='⏸ PAUSE';
-      onlineRoleFlash=180; // show for ~3 seconds (180 frames @ 60fps)
+      onlineRoleFlash=180;
       if(isHost)onlineResetBall();
     }
 
     function onlineResetBall(){
       running=false;
-      onlineSend({t:'reset'}); // tell guest: hide overlay, start countdown=3
+      onlineSend({t:'reset'});
       const angle=(Math.random()*40-20)*Math.PI/180,dir=Math.random()<.5?1:-1,spd=7;
       ball={x:W/2,y:H/2,vx:Math.sin(angle)*spd,vy:Math.cos(angle)*spd*dir,size:BS,trail:[]};
       countdown=3;
@@ -451,74 +406,54 @@
       },1000);
     }
 
-    // HOST physics loop — runs every frame, broadcasts to guest
     function onlineUpdateHost(){
-      // Broadcast authoritative state to guest every frame
-      // Use clearly named fields: myAx = host's own paddle, sHost/sGuest = scores
       onlineSend({
         t:'s',
         bx:ball.x,by:ball.y,vx:ball.vx,vy:ball.vy,tr:ball.trail,
         myAx:onlineMyPad.ax,
-        sHost:sL,sGuest:sR,
-        r:running&&!paused,  // FIX: never tell guest running=true while host is paused
+        sHost:sR,
+        sGuest:sL,
+        r:running&&!paused,
         cd:countdown
       });
-
       if(!running||paused)return;
-
       ball.trail.push({x:ball.x,y:ball.y});
       if(ball.trail.length>10)ball.trail.shift();
       ball.x+=ball.vx;ball.y+=ball.vy;
-
-      // Left/right walls
       if(ball.x-ball.size/2<=0){ball.x=ball.size/2;ball.vx*=-1;sWall();}
       if(ball.x+ball.size/2>=W){ball.x=W-ball.size/2;ball.vx*=-1;sWall();}
-
       const br=ball.size/2;
-      const topPadBottom   = onlineOpPad.y + onlineOpPad.h;   // y ≈ 18
-      const botPadTop      = onlineMyPad.y;                    // y ≈ 542
-
-      // FIX BUG 3 (phantom bounce) + BUG 2 (tunneling):
-      // Use a STRICT Y window — ball must actually be within ±speed of the paddle face.
-      // Check the PREVIOUS and CURRENT position to catch fast-moving balls (tunneling fix).
-      const prevY = ball.y - ball.vy; // where ball was last frame
-
-      // TOP paddle (opponent) — bounce when ball travels UP through paddle face
+      const topPadBottom=onlineOpPad.y+onlineOpPad.h;
+      const botPadTop=onlineMyPad.y;
+      const prevY=ball.y-ball.vy;
       if(ball.vy<0){
-        // Did ball cross the paddle face this frame? (between prevY and ball.y)
-        if(prevY-br>=topPadBottom && ball.y-br<=topPadBottom){
+        if(prevY-br>=topPadBottom&&ball.y-br<=topPadBottom){
           if(ball.x>onlineOpPad.ax-ZONE&&ball.x<onlineOpPad.ax+ZONE){
             const rel=(ball.x-onlineOpPad.ax)/ZONE,ang=rel*65*Math.PI/180;
             const spd=Math.min(Math.hypot(ball.vx,ball.vy)*1.05,14);
-            ball.y=topPadBottom+br; // push out of paddle
+            ball.y=topPadBottom+br;
             ball.vx=Math.sin(ang)*spd;ball.vy=Math.abs(Math.cos(ang)*spd);sPad();
           }
         }
       }
-
-      // BOTTOM paddle (host) — bounce when ball travels DOWN through paddle face
       if(ball.vy>0){
-        if(prevY+br<=botPadTop && ball.y+br>=botPadTop){
+        if(prevY+br<=botPadTop&&ball.y+br>=botPadTop){
           if(ball.x>onlineMyPad.ax-ZONE&&ball.x<onlineMyPad.ax+ZONE){
             const rel=(ball.x-onlineMyPad.ax)/ZONE,ang=rel*65*Math.PI/180;
             const spd=Math.min(Math.hypot(ball.vx,ball.vy)*1.05,14);
-            ball.y=botPadTop-br; // push out of paddle
+            ball.y=botPadTop-br;
             ball.vx=Math.sin(ang)*spd;ball.vy=-Math.abs(Math.cos(ang)*spd);sPad();
           }
         }
       }
-
-      // Scoring:
-      // ball exits TOP (y<0)   → host's bottom paddle missed → GUEST scores
-      // ball exits BOTTOM (y>H) → guest's top paddle missed → HOST scores
       if(ball.y<-20){
-        sR++;sREl.textContent=sR;animPop(sREl);sScore(); // sR = guest score on host screen
-        if(sR>=WIN){onlineSend({t:'w',w:'guest'});onlineShowResult('OPPONENT WINS!');}
+        sR++;sREl.textContent=sR;animPop(sREl);sScore();
+        if(sR>=WIN){onlineSend({t:'w',w:'host',sH:sR,sG:sL});onlineShowResult('🎉 YOU WIN!');}
         else{running=false;setTimeout(onlineResetBall,800);}
       }
       if(ball.y>H+20){
-        sL++;sLEl.textContent=sL;animPop(sLEl);sScore(); // sL = host score
-        if(sL>=WIN){onlineSend({t:'w',w:'host'});onlineShowResult('🎉 YOU WIN!');}
+        sL++;sLEl.textContent=sL;animPop(sLEl);sScore();
+        if(sL>=WIN){onlineSend({t:'w',w:'guest',sH:sR,sG:sL});onlineShowResult('OPPONENT WINS!');}
         else{running=false;setTimeout(onlineResetBall,800);}
       }
     }
@@ -527,7 +462,9 @@
       running=false;sWin();
       document.getElementById('overlay').classList.remove('hidden');
       ovTitle.textContent=msg;
-      ovSub.innerHTML='<span style="color:#00ffb4">Score: '+sL+' — '+sR+'</span>';
+      ovSub.innerHTML=isHost
+        ?'<span style="color:#00ffb4">Score: '+sR+' — '+sL+'</span>'
+        :'<span style="color:#00ffb4">Score: '+sL+' — '+sR+'</span>';
       modeBtns.style.display='none';ctrlArea.innerHTML='';
       retryArea.innerHTML=`
         ${isHost?'<button class="mbtn" id="ob-again"><span class="ic">🔄</span>PLAY AGAIN</button>':'<div style="color:#aaa;font-size:.5rem">Waiting for host...</div>'}
@@ -537,77 +474,49 @@
     }
 
     // ── DRAW ONLINE ────────────────────────────────────────────────────────────
-    // HOST sees: themselves at BOTTOM (green), opponent at TOP (red). y=0 is top.
-    // GUEST sees: themselves at BOTTOM (green), opponent at TOP (red).
-    //   But ball coords come from host space, so guest must FLIP Y: drawY = H - ball.y
-    //   This means when host sees ball near their bottom paddle, guest sees it near their top (opponent) paddle — correct.
     function drawOnline(){
       ctx.clearRect(0,0,W,H);
-
-      // For guest, all Y coords are flipped: fy(y) = H - y
-      // For host, fy(y) = y (no change)
-      const fy = isHost ? (y=>y) : (y=>H-y);
-
-      // Dashed center line (same either way)
+      const fy=isHost?(y=>y):(y=>H-y);
       ctx.setLineDash([8,12]);ctx.strokeStyle='#00ffb420';ctx.lineWidth=2;
       ctx.beginPath();ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.stroke();ctx.setLineDash([]);
-
-      // Court zone labels
       ctx.font='bold 11px Orbitron,monospace';ctx.textAlign='center';ctx.textBaseline='middle';
       ctx.fillStyle='#ff6b6b25';ctx.fillText('▲ OPPONENT ZONE ▲',W/2,H/4);
       ctx.fillStyle='#00ffb425';ctx.fillText('▼ YOUR ZONE ▼',W/2,H*3/4);
-
-      // Ball trail — flip Y for guest
       ball.trail.forEach((pt,i)=>{
         const a=(i/ball.trail.length)*.4,r=BS*(i/ball.trail.length)*.8;
         ctx.beginPath();ctx.arc(pt.x,fy(pt.y),r,0,Math.PI*2);
         ctx.fillStyle=`rgba(0,255,180,${a})`;ctx.fill();
       });
-      // Ball — flip Y for guest
       if(running||countdown>0){
         ctx.beginPath();ctx.arc(ball.x,fy(ball.y),BS/2,0,Math.PI*2);
         ctx.fillStyle='#fff';ctx.shadowColor='#00ffb4';ctx.shadowBlur=18;ctx.fill();ctx.shadowBlur=0;
       }
-
-      // MY paddle — always drawn at BOTTOM (green) — its visual Y is fixed at H-6-PPH
-      const myVisY = H-6-PPH;
+      const myVisY=H-6-PPH;
       ctx.fillStyle='#ffffff10';rr(0,myVisY,W,PPH,3);ctx.fill();
       ctx.fillStyle='#00ffb4';ctx.shadowColor='#00ffb4';ctx.shadowBlur=14;
       rr(onlineMyPad.ax-ZONE,myVisY,ZONE*2,PPH,5);ctx.fill();ctx.shadowBlur=0;
       ctx.font='bold 8px Orbitron,monospace';ctx.textAlign='center';ctx.textBaseline='bottom';
-      ctx.fillStyle='#00ffb4cc';
-      ctx.fillText('▼ YOU',onlineMyPad.ax,myVisY-2);
-
-      // OPPONENT paddle — always drawn at TOP (red) — its visual Y is fixed at 6
-      const opVisY = 6;
+      ctx.fillStyle='#00ffb4cc';ctx.fillText('▼ YOU',onlineMyPad.ax,myVisY-2);
+      const opVisY=6;
       ctx.fillStyle='#ffffff10';rr(0,opVisY,W,PPH,3);ctx.fill();
       ctx.fillStyle='#ff6b6b';ctx.shadowColor='#ff6b6b';ctx.shadowBlur=14;
       rr(onlineOpPad.ax-ZONE,opVisY,ZONE*2,PPH,5);ctx.fill();ctx.shadowBlur=0;
       ctx.font='7px Orbitron,monospace';ctx.textAlign='center';ctx.textBaseline='bottom';
-      ctx.fillStyle='#ff6b6b80';
-      ctx.fillText('OPPONENT',onlineOpPad.ax,opVisY-2);
-
-      // Countdown
+      ctx.fillStyle='#ff6b6b80';ctx.fillText('OPPONENT',onlineOpPad.ax,opVisY-2);
       if(countdown>0){
         ctx.font='bold 100px Orbitron,monospace';ctx.textAlign='center';ctx.textBaseline='middle';
         ctx.fillStyle='#00ffb4';ctx.shadowColor='#00ffb4';ctx.shadowBlur=30;
         ctx.fillText(countdown,W/2,H/2);ctx.shadowBlur=0;
       }
-
-      // Waiting for host message (guest only)
       if(!isHost&&!running&&countdown===0&&ball.vx===0&&ball.vy===0){
         ctx.font='14px Orbitron,monospace';ctx.textAlign='center';ctx.textBaseline='middle';
         ctx.fillStyle='#ffffff50';ctx.fillText('Waiting for host to start...',W/2,H/2+30);
       }
-
-      // Ping indicator
       if(onlinePingMs>0){
         ctx.font='9px monospace';ctx.textAlign='right';ctx.textBaseline='top';
         ctx.fillStyle=onlinePingMs<100?'#00ffb460':'#ff443380';
         ctx.fillText('ping '+onlinePingMs+'ms',W-6,6);
       }
-
-      // "YOUR PADDLE" role flash
       if(onlineRoleFlash>0){
         onlineRoleFlash--;
         const alpha=Math.min(1,onlineRoleFlash/30);
@@ -617,7 +526,6 @@
         ctx.fillText('▼ YOUR PADDLE — MOVE ME! ▼',W/2,myVisY-22);
         ctx.shadowBlur=0;
       }
-
       if(paused)drawPaused();
     }
 
@@ -662,7 +570,6 @@
     // ── UPDATE LOOP ────────────────────────────────────────────────────────────
     function update(){
       if(mode==='online'){
-        // Both host and guest move their own paddle continuously
         if(keys['ArrowLeft']||keys['a']||keys['A']){
           onlineMyPad.ax=Math.max(ZONE,onlineMyPad.ax-PPS);
           onlineSend({t:'p',ax:onlineMyPad.ax});
@@ -671,7 +578,6 @@
           onlineMyPad.ax=Math.min(W-ZONE,onlineMyPad.ax+PPS);
           onlineSend({t:'p',ax:onlineMyPad.ax});
         }
-        // ONLY host runs physics — guest just receives and renders
         if(isHost)onlineUpdateHost();
         return;
       }
@@ -859,7 +765,6 @@
       if(!mode)return;
       if(mode==='online'){
         if(isHost){
-          // Host is physics authority — toggle directly and notify guest
           onlinePaused=!onlinePaused;
           paused=onlinePaused;
           pauseBtn.textContent=paused?'▶ RESUME':'⏸ PAUSE';
@@ -873,7 +778,6 @@
             },1000);
           }
         }else{
-          // Guest sends pause request to host
           onlineSend({t:'pauseReq'});
         }
         return;
@@ -913,12 +817,12 @@
         pauseHover=overResume?'resume':overMenu?'menu':null;canvas.style.cursor=(overResume||overMenu)?'pointer':'default';return;
       }
       pauseHover=null;canvas.style.cursor='default';
+      if(mode==='multi')return;
       if(!running&&countdown===0)return;
       const mouseX=(e.clientX-rect.left)*(W/rect.width);
       if(mode==='breakout'){lp.x=Math.max(0,Math.min(W-lp.w,mouseX-lp.w/2));}
       else if(mode==='online'){onlineMyPad.ax=Math.max(ZONE,Math.min(W-ZONE,mouseX));onlineSend({t:'p',ax:onlineMyPad.ax});}
       else if(mode==='ai'){if(!rp.frozen)rp.ax=Math.max(ZONE,Math.min(W-ZONE,mouseX));}
-      else if(mode==='multi'){if(cy<H/2){if(!lp.frozen)lp.ax=Math.max(ZONE,Math.min(W-ZONE,mouseX));}else{if(!rp.frozen)rp.ax=Math.max(ZONE,Math.min(W-ZONE,mouseX));}}
     });
 
     canvas.addEventListener('click',e=>{
@@ -937,7 +841,6 @@
         if(mode==='breakout'){if(!lp.frozen)lp.x=Math.max(0,Math.min(W-lp.w,tx-lp.w/2));}
         else if(mode==='online'){onlineMyPad.ax=Math.max(ZONE,Math.min(W-ZONE,tx));onlineSend({t:'p',ax:onlineMyPad.ax});}
         else if(mode==='ai'){if(!rp.frozen)rp.ax=Math.max(ZONE,Math.min(W-ZONE,tx));}
-        else if(mode==='multi'){if(ty<H/2){if(!lp.frozen)lp.ax=Math.max(ZONE,Math.min(W-ZONE,tx));}else{if(!rp.frozen)rp.ax=Math.max(ZONE,Math.min(W-ZONE,tx));}}
       }
     },{passive:false});
     canvas.addEventListener('touchend',e=>{},{passive:false});
